@@ -1,21 +1,89 @@
 # Sponsor CRM Automation
 
-Automatisierung für die Notion-Datenbank **Sponsor Scavenger Hunt CRM** und Gmail. Das Script prüft regelmäßig neue Sponsoring-Leads, recherchiert öffentlich angegebene geschäftliche Kontaktinformationen und erstellt ausschließlich Gmail-Entwürfe.
+Automatisierung für die Notion-Datenbank **Sponsor Scavenger Hunt CRM** und Gmail. Das Script ergänzt Leads aus öffentlich verfügbaren Website-Daten, erstellt ausschließlich Gmail-Entwürfe und erkennt später, ob ein Entwurf manuell versendet wurde.
 
-Wichtig: Dieses Projekt sendet niemals automatisch E-Mails. Es verwendet nur `gmail.users.drafts.create`. Der finale Versand erfolgt immer manuell durch Silvan Dorner nach Pruefung im Gmail-Account.
+Wichtig: Dieses Projekt sendet niemals automatisch E-Mails. Der finale Versand erfolgt immer manuell durch Silvan Dorner nach Prüfung im Gmail-Account.
 
 ## Funktionen
 
-- Liest Notion-Eintraege mit Status `Neu`.
-- Recherchiert Kontaktinformationen nur auf offiziellen oder eindeutig geschaeftlichen Quellen wie Website, Kontaktseite, Impressum, Presse, Marketing, Sponsoring oder Kooperationen.
-- Verwendet bevorzugt allgemeine geschaeftliche Adressen wie `info@`, `kontakt@`, `marketing@`, `sponsoring@`, `kooperation@` oder `presse@`.
-- Erstellt keinen Entwurf, wenn keine sichere geschaeftliche E-Mail-Adresse gefunden wurde.
-- Aktualisiert Notion nach der Entwurfserstellung mit Kontaktadresse, Quelle, Anhang, Draft-ID und Hinweis auf den manuellen Versand.
-- Prueft Eintraege mit Status `Entwurf erstellt` und erkennt, ob ein zuvor erstellter Entwurf spaeter manuell gesendet wurde.
+- Liest Leads mit `Automation Status = Neu`.
+- Recherchiert öffentlich verfügbare Unternehmensdaten auf Website, Kontaktseite, Impressum, About-/Über-uns-Seiten, Presse, Marketing, Sponsoring und Kooperationen.
+- Ergänzt Firmenname, E-Mail, Telefon, Ansprechpartner, LinkedIn, Datenquelle, Datenqualität und letzte Aktualisierung in Notion.
+- Überschreibt manuell gepflegte Felder nicht automatisch.
+- Erstellt nur dann einen Gmail-Entwurf, wenn eine sichere geschäftliche E-Mail-Adresse gefunden wurde.
+- Unterscheidet regionale und überregionale Leads für den passenden Anhang.
+- Erkennt nach manuellem Versand eines Gmail-Entwurfs die gesendete Mail und verschiebt den Lead in der Pipeline auf `E-Mail / Contacted`.
+- Erstellt nach 7 Tagen ohne erkannte Antwort einen Follow-up-Entwurf.
+- Erkennt Antworten vorsichtig und verschiebt den Lead auf `Interested`.
+- Prüft mögliche Duplikate anhand von Website oder E-Mail.
+- Läuft über GitHub Actions alle 10 Minuten.
+
+## Notion-Felder
+
+Vorhandene oder empfohlene Felder:
+
+```text
+Name
+Website
+Location
+Industry
+Lead Score
+Email
+Phone
+Ansprechpartner
+Status
+Automation Status
+Gmail Draft Link
+Gmail Draft ID
+Gmail Draft Message ID
+Gmail Thread ID
+Gmail Sent Message ID
+Gesendet am
+Last Contacted
+LinkedIn
+Datenquelle
+Datenqualität
+Letzte Aktualisierung
+Automation Error
+Follow-up Draft ID
+Follow-up erstellt am
+Antwort erkannt am
+Notizen
+```
+
+`Status` ist der sichtbare Pipeline-Status mit Optionen wie:
+
+```text
+Lead
+Called / Contacted
+E-Mail / Contacted
+Interested
+Closed-Won
+Closed-Lost
+```
+
+`Automation Status` steuert die Technik:
+
+```text
+Neu
+Daten ergänzt
+Prüfen
+Entwurf erstellt
+Contacted Email
+Fehler
+```
+
+`Datenqualität`:
+
+```text
+Vollständig
+Teilweise
+Unvollständig
+```
 
 ## Setup
 
-### 1. Abhaengigkeiten installieren
+### 1. Abhängigkeiten installieren
 
 ```bash
 npm install
@@ -26,118 +94,72 @@ npm install
 1. In Notion eine Integration erstellen: <https://www.notion.so/my-integrations>
 2. Den internen Integration Token als `NOTION_API_KEY` speichern.
 3. Die Datenbank **Sponsor Scavenger Hunt CRM** mit der Integration teilen.
-4. Die Datenbank-ID aus der Notion-URL kopieren und als `NOTION_DATABASE_ID` speichern.
-5. Sicherstellen, dass diese Eigenschaften exakt existieren:
-   - `Sponsor / Unternehmen`
-   - `Website`
-   - `Ort`
-   - `Kategorie`
-   - `Reichweite`
-   - `Kontakt E-Mail`
-   - `Kontakt Telefon`
-   - `Ansprechpartner`
-   - `Status`
-   - `Gmail Draft Link`
-   - `Gmail Draft ID`
-   - `Gesendet am`
-   - `Notizen`
-
-Die Statuswerte sollten mindestens `Neu`, `Prüfen`, `Entwurf erstellt` und `Contacted Email` enthalten.
+4. Die Datenbank-ID als `NOTION_DATABASE_ID` speichern.
+5. Die oben genannten Felder in Notion anlegen.
 
 ### 3. Gmail API einrichten
 
-1. In der Google Cloud Console ein Projekt erstellen.
-2. Gmail API aktivieren.
-3. OAuth Consent Screen konfigurieren.
-4. OAuth Client ID für eine Desktop App oder Web App erstellen.
-5. `GMAIL_CLIENT_ID` und `GMAIL_CLIENT_SECRET` speichern.
-6. Einen Refresh Token für den Gmail-Account `htwgscavengerhunt@gmail.com` erzeugen.
-7. Der OAuth Scope sollte Entwuerfe erstellen und Mails lesen koennen, zum Beispiel:
+Die Gmail API benötigt weiterhin:
 
 ```text
 https://www.googleapis.com/auth/gmail.compose
 https://www.googleapis.com/auth/gmail.readonly
 ```
 
-Dieses Projekt nutzt keine Gmail-Send-Funktion.
+Das Script nutzt `drafts.create`, aber keine Send-Funktion.
 
-### 4. Umgebungsvariablen
+### 4. GitHub Secrets
 
-Lokal kann eine `.env` Datei auf Basis von `.env.example` erstellt werden:
-
-```bash
-cp .env.example .env
-```
-
-Benötigte Werte:
+In GitHub unter **Settings > Secrets and variables > Actions > Repository secrets**:
 
 ```text
-NOTION_API_KEY=
-NOTION_DATABASE_ID=
-GMAIL_CLIENT_ID=
-GMAIL_CLIENT_SECRET=
-GMAIL_REFRESH_TOKEN=
-GMAIL_SENDER_EMAIL=htwgscavengerhunt@gmail.com
+NOTION_API_KEY
+NOTION_DATABASE_ID
+GMAIL_CLIENT_ID
+GMAIL_CLIENT_SECRET
+GMAIL_REFRESH_TOKEN
+GMAIL_SENDER_EMAIL
 ```
-
-In GitHub muessen dieselben Werte unter **Settings > Secrets and variables > Actions > Repository secrets** gespeichert werden.
 
 ### 5. Attachments
 
-Lege die beiden PDFs exakt mit diesen Dateinamen im Ordner `attachments/` ab:
+Diese beiden Dateien müssen exakt im Ordner `attachments/` liegen:
 
 ```text
 attachments/Infoblatt HTWG Scavengerhunt.pdf
 attachments/Infoblatt HTWG.Scavengerhunt.pdf
 ```
 
-Regionale Leads erhalten `Infoblatt HTWG Scavengerhunt.pdf`. Ueberregionale oder nicht eindeutig lokale Leads erhalten `Infoblatt HTWG.Scavengerhunt.pdf`.
+Regionale Leads erhalten `Infoblatt HTWG Scavengerhunt.pdf`. Überregionale oder nicht eindeutig lokale Leads erhalten `Infoblatt HTWG.Scavengerhunt.pdf`.
 
-### 6. GitHub Actions
+## Ablauf
 
-Der Workflow liegt unter `.github/workflows/run.yml`.
+1. Du legst in Notion einen Lead an.
+2. Du trägst mindestens `Website` ein.
+3. Du setzt `Automation Status` auf `Neu`.
+4. Die Automation ergänzt öffentlich verfügbare Kontaktdaten.
+5. Wenn eine sichere E-Mail gefunden wurde, erstellt sie einen Gmail-Entwurf.
+6. Der Lead bleibt im Pipeline-Status `Lead`.
+7. Du prüfst den Entwurf manuell in Gmail und klickst selbst auf `Senden`.
+8. Beim nächsten Lauf erkennt die Automation den Versand und setzt den Pipeline-Status auf `E-Mail / Contacted`.
+9. Nach 7 Tagen ohne erkannte Antwort wird ein Follow-up-Entwurf erstellt.
+10. Wenn eine Antwort erkannt wird, wird der Lead auf `Interested` gesetzt.
 
-Er laeuft alle 30 Minuten und kann zusaetzlich manuell gestartet werden:
+## Test
 
-1. Repository auf GitHub oeffnen.
-2. Tab **Actions** oeffnen.
-3. Workflow **Run sponsor CRM automation** auswaehlen.
-4. **Run workflow** starten.
-
-Der Workflow fuehrt `npm install` und danach `npm start` aus.
+1. In Notion einen Test-Lead mit Website anlegen.
+2. `Automation Status` auf `Neu` setzen.
+3. In GitHub Actions den Workflow **Run sponsor CRM automation** manuell starten.
+4. Prüfen, ob Notion Kontaktdaten und Datenqualität ergänzt.
+5. Prüfen, ob in Gmail ein Entwurf erstellt wurde.
+6. Entwurf manuell senden.
+7. Workflow erneut starten.
+8. Prüfen, ob der Lead in Notion auf `E-Mail / Contacted` verschoben wurde.
 
 ## Sicherheit
 
-- Die Automatisierung verwendet ausschliesslich `gmail.users.drafts.create`.
-- Es gibt keinen Codepfad für automatisches Senden.
-- Wenn die Recherche unsicher ist, wird der Notion-Status auf `Prüfen` gesetzt.
-- Wenn keine sichere geschaeftliche E-Mail-Adresse gefunden wird, wird kein Gmail-Entwurf erstellt.
-- Private E-Mail-Adressen oder private Telefonnummern werden nicht genutzt.
-- Secrets werden nur ueber Umgebungsvariablen gelesen und nicht geloggt.
-
-## Troubleshooting
-
-### Notion findet keine Leads
-
-- Prüfen, ob die Datenbank mit der Integration geteilt wurde.
-- Prüfen, ob `NOTION_DATABASE_ID` korrekt ist.
-- Prüfen, ob der Statuswert exakt `Neu` heisst.
-
-### Status kann nicht gesetzt werden
-
-- Prüfen, ob die Statusoptionen in Notion existieren.
-- Falls Notion abweichende Statusnamen verwendet, den Statuswert in `src/notion.js` bei Bedarf exakt anpassen.
-
-### Gmail-Entwurf wird nicht erstellt
-
-- Prüfen, ob die Gmail API aktiviert ist.
-- Prüfen, ob der Refresh Token zum Absenderkonto gehört.
-- Prüfen, ob beide PDFs im Ordner `attachments/` mit exakt korrektem Namen liegen.
-
-### Lead wird auf `Prüfen` gesetzt
-
-Das passiert, wenn keine sichere allgemeine geschaeftliche E-Mail-Adresse auf offiziellen Seiten gefunden wurde. In `Notizen` werden die geprueften Quellen und der Grund protokolliert.
-
-### Manueller Versand wird nicht erkannt
-
-Die Erkennung ist bewusst konservativ. Sie aktualisiert Notion nur, wenn der Draft nicht mehr existiert und eine passende Nachricht im Ordner `Gesendet` mit gleicher Empfaengeradresse und gleichem Betreff gefunden wurde.
+- Keine E-Mail wird automatisch gesendet.
+- Wenn keine sichere geschäftliche E-Mail gefunden wird, wird kein Entwurf erstellt.
+- Private oder geschützte Daten werden nicht genutzt.
+- Manuell gepflegte Notion-Felder werden nicht überschrieben.
+- Fehler werden in `Automation Error` und `Notizen` gespeichert.

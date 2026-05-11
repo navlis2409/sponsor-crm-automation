@@ -3,6 +3,7 @@ import path from "node:path";
 import { google } from "googleapis";
 
 const SUBJECT = "Sponsoring-Anfrage für HTWG Scavengerhunt";
+const FOLLOW_UP_SUBJECT = "Kurze Nachfrage zur Sponsoring-Anfrage";
 
 export function createGmailClient() {
   const oauth2Client = new google.auth.OAuth2(
@@ -17,28 +18,61 @@ export function createGmailClient() {
   return google.gmail({ version: "v1", auth: oauth2Client });
 }
 
-export async function createDraft(gmail, { to, body, attachmentPath }) {
+export async function createDraft(gmail, { to, body, attachmentPath, leadId, subject = SUBJECT, replyMessageId = null }) {
   const sender = requiredEnv("GMAIL_SENDER_EMAIL");
   const raw = await buildRawMessage({
     from: sender,
     to,
-    subject: SUBJECT,
+    subject,
     body,
-    attachmentPath
+    attachmentPath,
+    headers: {
+      "X-Notion-Page-Id": leadId,
+      "X-CRM-Automation": "sponsor-crm-automation"
+    }
   });
+
+  const requestBody = {
+    message: { raw }
+  };
+
+  if (replyMessageId) {
+    requestBody.message.threadId = replyMessageId;
+  }
 
   const response = await gmail.users.drafts.create({
     userId: "me",
-    requestBody: {
-      message: { raw }
-    }
+    requestBody
   });
 
   return {
     id: response.data.id,
     messageId: response.data.message?.id,
+    threadId: response.data.message?.threadId,
     link: "https://mail.google.com/mail/u/0/#drafts"
   };
+}
+
+export async function createFollowUpDraft(gmail, lead) {
+  const body = [
+    "Sehr geehrte Damen und Herren,",
+    "",
+    "ich wollte mich kurz nach meiner Sponsoring-Anfrage zur HTWG Scavengerhunt erkundigen.",
+    "",
+    "Falls eine Unterstützung unserer Veranstaltung mit passenden Preisen, zum Beispiel Eintrittskarten oder Gutscheinen, für Sie grundsätzlich vorstellbar ist, freuen wir uns sehr über eine kurze Rückmeldung.",
+    "",
+    "Vielen Dank und freundliche Grüße",
+    "",
+    "Silvan Dorner",
+    "HTWG Scavengerhunt Team"
+  ].join("\n");
+
+  return createDraft(gmail, {
+    to: lead.contactEmail,
+    body,
+    leadId: lead.id,
+    subject: FOLLOW_UP_SUBJECT
+  });
 }
 
 export async function draftExists(gmail, draftId) {
@@ -59,40 +93,30 @@ export async function draftExists(gmail, draftId) {
 }
 
 export async function findManualSentMessage(gmail, lead) {
-  const to = lead.contactEmail;
-  if (!to) return null;
+  if (!lead.contactEmail) return null;
 
   const query = [
     "in:sent",
-    `to:${to}`,
-    `subject:\"${SUBJECT}\"`
+    `to:${lead.contactEmail}`,
+    `subject:"${SUBJECT}"`,
+    "newer_than:180d"
   ].join(" ");
 
-  const list = await gmail.users.messages.list({
-    userId: "me",
-    q: query,
-    maxResults: 10
-  });
-
-  const messages = list.data.messages || [];
-  if (messages.length === 0) return null;
+  const messages = await listMessages(gmail, query, 10);
 
   for (const message of messages) {
-    const response = await gmail.users.messages.get({
-      userId: "me",
-      id: message.id,
-      format: "metadata",
-      metadataHeaders: ["Date", "To", "Subject"]
-    });
+    const sent = await getMessageMetadata(gmail, message.id, [
+      "Date",
+      "To",
+      "Subject",
+      "X-Notion-Page-Id"
+    ]);
 
-    const headers = response.data.payload?.headers || [];
-    const subject = getHeader(headers, "Subject");
-    const recipient = getHeader(headers, "To");
-
-    if (subject === SUBJECT && recipient.toLowerCase().includes(to.toLowerCase())) {
+    if (matchesSentLead(sent, lead)) {
       return {
-        id: response.data.id,
-        sentAt: parseGmailDate(getHeader(headers, "Date"))
+        id: sent.id,
+        threadId: sent.threadId,
+        sentAt: parseGmailDate(sent.headers.Date)
       };
     }
   }
@@ -100,7 +124,95 @@ export async function findManualSentMessage(gmail, lead) {
   return null;
 }
 
-async function buildRawMessage({ from, to, subject, body, attachmentPath }) {
+export async function findReplyToLead(gmail, lead) {
+  if (!lead.contactEmail || !lead.sentAt || lead.replyDetectedAt) return null;
+
+  const domain = lead.contactEmail.split("@")[1];
+  const after = formatGmailAfterDate(lead.sentAt);
+  const queries = [
+    `from:${lead.contactEmail} subject:"${SUBJECT}" after:${after}`,
+    domain ? `from:${domain} subject:"${SUBJECT}" after:${after}` : null
+  ].filter(Boolean);
+
+  for (const query of queries) {
+    const messages = await listMessages(gmail, query, 5);
+    for (const message of messages) {
+      const reply = await getMessageMetadata(gmail, message.id, ["Date", "From", "To", "Subject", "Auto-Submitted", "Precedence"]);
+      const from = reply.headers.From || "";
+      if (!from.toLowerCase().includes(requiredEnv("GMAIL_SENDER_EMAIL").toLowerCase()) && !isAutomaticReply(reply.headers)) {
+        return {
+          id: reply.id,
+          threadId: reply.threadId,
+          receivedAt: parseGmailDate(reply.headers.Date)
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function isAutomaticReply(headers) {
+  const autoSubmitted = headers["Auto-Submitted"] || "";
+  const precedence = headers.Precedence || "";
+  return autoSubmitted.toLowerCase().includes("auto") || ["bulk", "list", "junk"].includes(precedence.toLowerCase());
+}
+
+async function listMessages(gmail, query, maxResults) {
+  const list = await gmail.users.messages.list({
+    userId: "me",
+    q: query,
+    maxResults
+  });
+
+  return list.data.messages || [];
+}
+
+async function getMessageMetadata(gmail, id, headers) {
+  const response = await gmail.users.messages.get({
+    userId: "me",
+    id,
+    format: "metadata",
+    metadataHeaders: headers
+  });
+
+  return {
+    id: response.data.id,
+    threadId: response.data.threadId,
+    headers: Object.fromEntries(
+      (response.data.payload?.headers || []).map((header) => [header.name, header.value])
+    )
+  };
+}
+
+function matchesSentLead(message, lead) {
+  const subject = message.headers.Subject || "";
+  const recipient = message.headers.To || "";
+  const notionPageId = message.headers["X-Notion-Page-Id"] || "";
+
+  if (notionPageId && notionPageId === lead.id) return true;
+  if (lead.gmailThreadId && message.threadId === lead.gmailThreadId) return true;
+
+  return subject === SUBJECT && recipient.toLowerCase().includes(lead.contactEmail.toLowerCase());
+}
+
+async function buildRawMessage({ from, to, subject, body, attachmentPath, headers = {} }) {
+  if (!attachmentPath) {
+    const lines = [
+      `From: ${from}`,
+      `To: ${to}`,
+      `Subject: ${encodeSubject(subject)}`,
+      ...headerLines(headers),
+      "MIME-Version: 1.0",
+      "Content-Type: text/plain; charset=UTF-8",
+      "Content-Transfer-Encoding: base64",
+      "",
+      chunkBase64(Buffer.from(body, "utf8").toString("base64"))
+    ];
+
+    return base64UrlEncode(lines.join("\r\n"));
+  }
+
   const boundary = `sponsor-crm-${Date.now()}`;
   const attachment = await fs.readFile(attachmentPath);
   const filename = path.basename(attachmentPath);
@@ -109,6 +221,7 @@ async function buildRawMessage({ from, to, subject, body, attachmentPath }) {
     `From: ${from}`,
     `To: ${to}`,
     `Subject: ${encodeSubject(subject)}`,
+    ...headerLines(headers),
     "MIME-Version: 1.0",
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     "",
@@ -131,8 +244,10 @@ async function buildRawMessage({ from, to, subject, body, attachmentPath }) {
   return base64UrlEncode(lines.join("\r\n"));
 }
 
-function getHeader(headers, name) {
-  return headers.find((header) => header.name.toLowerCase() === name.toLowerCase())?.value || "";
+function headerLines(headers) {
+  return Object.entries(headers)
+    .filter(([, value]) => value)
+    .map(([key, value]) => `${key}: ${value}`);
 }
 
 function parseGmailDate(value) {
@@ -142,6 +257,16 @@ function parseGmailDate(value) {
   if (Number.isNaN(date.getTime())) return null;
 
   return date.toISOString();
+}
+
+function formatGmailAfterDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "1970/01/01";
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0")
+  ].join("/");
 }
 
 function encodeSubject(subject) {
@@ -168,4 +293,4 @@ function requiredEnv(name) {
   return value;
 }
 
-export { SUBJECT };
+export { FOLLOW_UP_SUBJECT, SUBJECT };
