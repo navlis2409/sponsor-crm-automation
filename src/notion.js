@@ -13,7 +13,7 @@ export const PROPERTIES = {
   gmailDraftLink: "Gmail Draft Link",
   gmailDraftId: "Gmail Draft ID",
   sentAt: "Gesendet am",
-  notes: "Notizen"
+  notes: "Notes"
 };
 
 export function createNotionClient() {
