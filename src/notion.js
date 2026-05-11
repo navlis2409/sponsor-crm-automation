@@ -79,12 +79,14 @@ export async function getContactedEmailLeads(notion) {
 export async function findExistingLeadByWebsiteOrEmail(notion, lead) {
   const filters = [];
 
-  if (lead.website) {
-    filters.push({ property: resolvePropertyName(lead, "website"), url: { equals: lead.website } });
+  const websiteProperty = resolvePropertyName(lead, "website");
+  if (lead.website && websiteProperty) {
+    filters.push({ property: websiteProperty, url: { equals: lead.website } });
   }
 
-  if (lead.contactEmail) {
-    filters.push({ property: resolvePropertyName(lead, "contactEmail"), email: { equals: lead.contactEmail } });
+  const emailProperty = resolvePropertyName(lead, "contactEmail");
+  if (lead.contactEmail && emailProperty) {
+    filters.push({ property: emailProperty, email: { equals: lead.contactEmail } });
   }
 
   if (filters.length === 0) return null;
@@ -208,7 +210,7 @@ export async function updateLeadAfterFollowUpDraft(notion, lead, draftResult) {
   const patch = createLeadPatch(lead);
   patch.set("followUpDraftId", richText(draftResult.id));
   patch.set("followUpCreatedAt", dateValue(new Date().toISOString()));
-  patch.set("notes", richText(appendNote(lead.notes, "Follow-up-Entwurf erstellt, kein automatischer Versand.")));
+  patch.set("notes", richText(appendNote(lead.notes, "Follow-up-Entwurf erstellt, kein automatischer Versand."));
   await patch.apply(notion);
 }
 
@@ -280,7 +282,7 @@ function createLeadPatch(lead) {
 function resolvePropertyName(lead, key) {
   const existing = lead.propertyNames || {};
   if (existing[key]) return existing[key];
-  return PROPERTIES[key]?.[0];
+  return null;
 }
 
 function hasLeadValue(lead, key) {
