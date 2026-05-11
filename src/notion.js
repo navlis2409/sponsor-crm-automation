@@ -1,15 +1,15 @@
 import { Client } from "@notionhq/client";
 
 export const PROPERTIES = {
-  company: "Sponsor / Unternehmen",
+  company: "Name",
   website: "Website",
-  location: "Ort",
-  category: "Kategorie",
-  reach: "Reichweite",
-  contactEmail: "Kontakt E-Mail",
-  contactPhone: "Kontakt Telefon",
+  location: "Location",
+  category: "Industry",
+  reach: "Lead Score",
+  contactEmail: "Email",
+  contactPhone: "Phone",
   contactPerson: "Ansprechpartner",
-  status: "Status",
+  status: "Automation Status",
   gmailDraftLink: "Gmail Draft Link",
   gmailDraftId: "Gmail Draft ID",
   sentAt: "Gesendet am",
@@ -30,7 +30,7 @@ export async function getLeadsByStatus(notion, status) {
       start_cursor: cursor,
       filter: {
         property: PROPERTIES.status,
-        status: { equals: status }
+        select: { equals: status }
       }
     });
 
@@ -43,7 +43,7 @@ export async function getLeadsByStatus(notion, status) {
 
 export async function markNeedsReview(notion, lead, reason) {
   await updateLead(notion, lead.id, {
-    [PROPERTIES.status]: statusValue("Prüfen"),
+    [PROPERTIES.status]: selectValue("Prüfen"),
     [PROPERTIES.notes]: richText(appendNote(lead.notes, reason))
   });
 }
@@ -64,7 +64,7 @@ export async function updateLeadAfterDraft(notion, lead, draftResult, research, 
 
   const properties = {
     [PROPERTIES.contactEmail]: emailValue(research.email),
-    [PROPERTIES.status]: statusValue("Entwurf erstellt"),
+    [PROPERTIES.status]: selectValue("Entwurf erstellt"),
     [PROPERTIES.gmailDraftId]: richText(draftResult.id),
     [PROPERTIES.gmailDraftLink]: urlValue(draftResult.link),
     [PROPERTIES.notes]: richText(notes)
@@ -83,7 +83,7 @@ export async function updateLeadAfterDraft(notion, lead, draftResult, research, 
 
 export async function updateLeadAfterManualSend(notion, lead, sentAt) {
   const properties = {
-    [PROPERTIES.status]: statusValue("Contacted Email"),
+    [PROPERTIES.status]: selectValue("Contacted Email"),
     [PROPERTIES.notes]: richText(appendNote(lead.notes, "E-Mail wurde manuell versendet."))
   };
 
@@ -106,15 +106,15 @@ function mapLead(page) {
 
   return {
     id: page.id,
-    company: readTitle(properties[PROPERTIES.company]),
+    company: readTitle(properties[PROPERTIES.company]) || readPlainText(properties.Company),
     website: readUrlOrText(properties[PROPERTIES.website]),
     location: readPlainText(properties[PROPERTIES.location]),
     category: readSelectLike(properties[PROPERTIES.category]),
-    reach: readSelectLike(properties[PROPERTIES.reach]),
+    reach: readNumberOrText(properties[PROPERTIES.reach]),
     contactEmail: readEmailOrText(properties[PROPERTIES.contactEmail]),
     contactPhone: readPhoneOrText(properties[PROPERTIES.contactPhone]),
     contactPerson: readPlainText(properties[PROPERTIES.contactPerson]),
-    status: readStatus(properties[PROPERTIES.status]),
+    status: readSelectLike(properties[PROPERTIES.status]),
     gmailDraftLink: readUrlOrText(properties[PROPERTIES.gmailDraftLink]),
     gmailDraftId: readPlainText(properties[PROPERTIES.gmailDraftId]),
     sentAt: readDate(properties[PROPERTIES.sentAt]),
@@ -150,17 +150,18 @@ function readPhoneOrText(property) {
   return property.phone_number || readPlainText(property);
 }
 
+function readNumberOrText(property) {
+  if (!property) return "";
+  if (typeof property.number === "number") return String(property.number);
+  return readPlainText(property);
+}
+
 function readSelectLike(property) {
   if (!property) return "";
   if (property.select) return property.select?.name || "";
   if (property.status) return property.status?.name || "";
   if (property.multi_select) return property.multi_select.map((item) => item.name).join(", ");
   return readPlainText(property);
-}
-
-function readStatus(property) {
-  if (!property) return "";
-  return property.status?.name || property.select?.name || "";
 }
 
 function readDate(property) {
@@ -196,8 +197,8 @@ function urlValue(value) {
   return value ? { url: value } : { url: null };
 }
 
-function statusValue(name) {
-  return { status: { name } };
+function selectValue(name) {
+  return { select: { name } };
 }
 
 function appendNote(existingNotes, addition) {
