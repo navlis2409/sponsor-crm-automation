@@ -26,6 +26,8 @@ export const PROPERTIES = {
   followUpDraftId: ["Follow-up Draft ID", "Follow Up Draft ID"],
   followUpCreatedAt: ["Follow-up erstellt am", "Follow Up Created At"],
   replyDetectedAt: ["Antwort erkannt am"],
+  emailPrompt: ["E-Mail Prompt", "E-Mail Hinweis", "Email Prompt", "Email Hinweis"],
+  desiredPrize: ["Gewünschter Preis", "Gewuenschter Preis", "Gewünschte Unterstützung", "Gewuenschte Unterstuetzung"],
   notes: ["Notizen", "Notes"]
 };
 
@@ -67,18 +69,12 @@ export async function getLeadsForAutomation(notion) {
 }
 
 export async function getDraftedLeads(notion) {
-  const pages = await queryAllDatabasePages(
-    notion,
-    selectFilter("automationStatus", AUTOMATION_STATUS.DRAFT_CREATED)
-  );
+  const pages = await queryAllDatabasePages(notion, selectFilter("automationStatus", AUTOMATION_STATUS.DRAFT_CREATED));
   return pages.map(mapLead);
 }
 
 export async function getContactedEmailLeads(notion) {
-  const pages = await queryAllDatabasePages(
-    notion,
-    selectFilter("automationStatus", AUTOMATION_STATUS.CONTACTED)
-  );
+  const pages = await queryAllDatabasePages(notion, selectFilter("automationStatus", AUTOMATION_STATUS.CONTACTED));
   return pages.map(mapLead);
 }
 
@@ -106,15 +102,15 @@ export async function findExistingLeadByWebsiteOrEmail(notion, lead) {
 }
 
 export async function updateLeadAfterEnrichment(notion, lead, enrichment, duplicate) {
-  const quality = duplicate ? DATA_QUALITY.INCOMPLETE : enrichment.dataQuality;
+  const quality = duplicate
+    ? DATA_QUALITY.INCOMPLETE
+    : enrichment.dataQuality;
 
   const notes = [
     duplicate ? `Möglicher Duplikat-Lead gefunden: ${duplicate.company || duplicate.id}` : null,
     enrichment.reason,
     enrichment.sources?.length ? `Datenquelle: ${enrichment.sources.join(", ")}` : null
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ].filter(Boolean).join("\n");
 
   const patch = createLeadPatch(lead);
   patch.setIfEmpty("company", titleValue(enrichment.company));
@@ -174,9 +170,7 @@ export async function updateLeadAfterDraft(notion, lead, draftResult, research, 
       `Quelle der Kontaktdaten: ${(research.sources || []).join(", ")}`,
       `Gewählter Anhang: ${attachmentPath}`,
       `Personalisierung: ${personalizationReason}`
-    ]
-      .filter(Boolean)
-      .join("\n")
+    ].filter(Boolean).join("\n")
   );
 
   const patch = createLeadPatch(lead);
@@ -202,11 +196,9 @@ export async function updateLeadAfterManualSend(notion, lead, sentMessage) {
   const notes = appendNote(lead.notes, "E-Mail wurde manuell versendet.");
   const patch = createLeadPatch(lead);
   patch.set("automationStatus", selectValue(AUTOMATION_STATUS.CONTACTED));
-
   if (!lead.pipelineStatus || lead.pipelineStatus === PIPELINE_STATUS.LEAD) {
     patch.set("pipelineStatus", selectLikeValue(lead.pipelineStatusType, PIPELINE_STATUS.CONTACTED_EMAIL));
   }
-
   patch.set("sentAt", dateValue(sentMessage.sentAt));
   patch.set("lastContacted", dateValue(sentMessage.sentAt));
   patch.set("gmailSentMessageId", richText(sentMessage.id));
@@ -228,11 +220,9 @@ export async function updateLeadAfterReply(notion, lead, reply) {
   const patch = createLeadPatch(lead);
   patch.set("replyDetectedAt", dateValue(reply.receivedAt));
   patch.set("notes", richText(appendNote(lead.notes, `Antwort vom Sponsor erkannt. Bitte prüfen.\nGmail Message ID: ${reply.id}`)));
-
   if (!lead.pipelineStatus || lead.pipelineStatus === PIPELINE_STATUS.CONTACTED_EMAIL) {
     patch.set("pipelineStatus", selectLikeValue(lead.pipelineStatusType, PIPELINE_STATUS.INTERESTED));
   }
-
   await patch.apply(notion);
 }
 
@@ -337,6 +327,8 @@ function mapLead(page) {
     followUpDraftId: readPlainText(properties[propertyNames.followUpDraftId]),
     followUpCreatedAt: readDate(properties[propertyNames.followUpCreatedAt]),
     replyDetectedAt: readDate(properties[propertyNames.replyDetectedAt]),
+    emailPrompt: readPlainText(properties[propertyNames.emailPrompt]),
+    desiredPrize: readPlainText(properties[propertyNames.desiredPrize]),
     notes: readPlainText(properties[propertyNames.notes])
   };
 }

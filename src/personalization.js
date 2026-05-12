@@ -89,6 +89,9 @@ const ANGLES = [
 
 export function buildPersonalization(lead, research = {}) {
   const context = buildContext(lead, research);
+  const promptPersonalization = buildPromptPersonalization(context);
+  if (promptPersonalization) return promptPersonalization;
+
   const angle = ANGLES.find((candidate) => hasKeyword(context.normalizedText, candidate.keywords));
 
   if (angle) {
@@ -133,15 +136,54 @@ export function buildPersonalization(lead, research = {}) {
   };
 }
 
+function buildPromptPersonalization(context) {
+  const sentence = buildPromptSentence(context.emailPrompt);
+  if (!sentence) return null;
+
+  return {
+    paragraph:
+      `${context.company} ist uns als mÃ¶glicher Partner fÃ¼r unsere Schnitzeljagd positiv aufgefallen. ` +
+      sentence,
+    reason: `E-Mail Prompt aus Notion verwendet: "${shortenForReason(context.emailPrompt)}"`
+  };
+}
+
+function buildPromptSentence(prompt) {
+  let text = cleanPrompt(prompt);
+  if (!text || isStyleOnlyPrompt(text)) return null;
+
+  const dassMatch = text.match(/\bdass\s+(.+)/i);
+  if (dassMatch?.[1]) {
+    const content = cleanPrompt(dassMatch[1]);
+    if (!content) return null;
+    return ensureSentence(`FÃ¼r unsere Anfrage ist besonders relevant, dass ${lowerLeadingArticle(content)}`);
+  }
+
+  text = text
+    .replace(/^(bitte\s+)?(betone|betonen|erwÃ¤hne|erwaehne|nenn|nenne|hervorheben|hebe)\s*(bitte\s+)?[:,]?\s*/i, "")
+    .replace(/^(sprich|spreche)\s+(bitte\s+)?/i, "")
+    .replace(/\s+an$/i, "");
+
+  text = cleanPrompt(text);
+  if (!text || isStyleOnlyPrompt(text)) return null;
+
+  if (looksLikeCompleteSentence(text)) return ensureSentence(text);
+
+  return ensureSentence(`Besonders passend finden wir ${lowerLeadingArticle(text)}`);
+}
+
 function buildContext(lead, research) {
   const company = cleanValue(lead.company || research.company) || "Ihre Organisation";
   const category = cleanValue(lead.category);
   const location = cleanValue(lead.location);
+  const emailPrompt = cleanValue(lead.emailPrompt);
   const text = [
     lead.company,
     research.company,
     lead.category,
     lead.location,
+    lead.emailPrompt,
+    lead.desiredPrize,
     lead.notes,
     lead.website,
     ...(research.sources || [])
@@ -153,6 +195,7 @@ function buildContext(lead, research) {
     company,
     category,
     location,
+    emailPrompt,
     regional: isRegionalLead({ ...lead, company }),
     normalizedText: normalize(text)
   };
@@ -189,4 +232,55 @@ function normalize(value) {
 
 function cleanValue(value) {
   return String(value || "").trim();
+}
+
+function cleanPrompt(value) {
+  return cleanValue(value)
+    .replace(/\s+/g, " ")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/[;:,\s]+$/g, "")
+    .slice(0, 260);
+}
+
+function looksLikeCompleteSentence(value) {
+  return /[.!?]$/.test(value) || /^(Der|Die|Das|Ihr|Ihre|Unser|Unsere|Als|Durch|Gerade)\b/.test(value);
+}
+
+function ensureSentence(value) {
+  const text = cleanValue(value);
+  if (!text) return "";
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+function lowerLeadingArticle(value) {
+  return cleanValue(value).replace(/^(Der|Die|Das|Den|Dem|Ihr|Ihre|Ihrem|Ihren)\b/, (match) => match.toLowerCase());
+}
+
+function isStyleOnlyPrompt(value) {
+  const text = normalize(value);
+  const styleWords = ["sachlich", "professionell", "kurz", "freundlich", "locker", "nicht zu", "formuliere"];
+  const contentWords = [
+    "eintritt",
+    "gutschein",
+    "preis",
+    "regional",
+    "bodensee",
+    "konstanz",
+    "student",
+    "museum",
+    "kultur",
+    "erlebnis",
+    "ausflug",
+    "produkt",
+    "genuss",
+    "ticket",
+    "veranstaltung"
+  ];
+
+  return styleWords.some((word) => text.includes(word)) && !contentWords.some((word) => text.includes(word));
+}
+
+function shortenForReason(value) {
+  const text = cleanPrompt(value);
+  return text.length > 120 ? `${text.slice(0, 117)}...` : text;
 }
