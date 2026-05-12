@@ -2,8 +2,12 @@ name: Run sponsor CRM automation
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "3,13,23,33,43,53 * * * *"
   workflow_dispatch:
+
+concurrency:
+  group: sponsor-crm-automation
+  cancel-in-progress: false
 
 jobs:
   run:
@@ -12,6 +16,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Show trigger info
+        run: |
+          echo "Event: $GITHUB_EVENT_NAME"
+          echo "UTC time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
