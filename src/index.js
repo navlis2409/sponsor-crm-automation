@@ -134,11 +134,23 @@ async function processDraftedLead(notion, gmail, lead) {
     return;
   }
 
+  const sentMessageInThread = await findManualSentMessage(gmail, lead, { allowSearchFallback: false });
+  if (sentMessageInThread) {
+    await updateLeadAfterManualSend(notion, lead, sentMessageInThread);
+    return;
+  }
+
   const stillDraft = await draftExists(gmail, lead.gmailDraftId);
-  if (stillDraft) return;
+  if (stillDraft) {
+    console.log(`Gmail-Entwurf existiert noch, Lead bleibt unveraendert: ${lead.company || lead.id}`);
+    return;
+  }
 
   const sentMessage = await findManualSentMessage(gmail, lead);
-  if (!sentMessage) return;
+  if (!sentMessage) {
+    console.log(`Keine passende gesendete Gmail-Nachricht gefunden: ${lead.company || lead.id}`);
+    return;
+  }
 
   await updateLeadAfterManualSend(notion, lead, sentMessage);
 }
@@ -158,6 +170,8 @@ async function processContactedLeads(notion, gmail) {
 }
 
 async function processContactedLead(notion, gmail, lead) {
+  if (lead.pipelineStatus === "Interested") return;
+
   const reply = await findReplyToLead(gmail, lead);
   if (reply) {
     await updateLeadAfterReply(notion, lead, reply);

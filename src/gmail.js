@@ -92,8 +92,13 @@ export async function draftExists(gmail, draftId) {
   }
 }
 
-export async function findManualSentMessage(gmail, lead) {
+export async function findManualSentMessage(gmail, lead, { allowSearchFallback = true } = {}) {
   if (!lead.contactEmail) return null;
+
+  const sentMessageInThread = await findSentMessageInThread(gmail, lead);
+  if (sentMessageInThread) return sentMessageInThread;
+
+  if (!allowSearchFallback) return null;
 
   const query = [
     "in:sent",
@@ -122,6 +127,41 @@ export async function findManualSentMessage(gmail, lead) {
   }
 
   return null;
+}
+
+async function findSentMessageInThread(gmail, lead) {
+  if (!lead.gmailThreadId) return null;
+
+  try {
+    const response = await gmail.users.threads.get({
+      userId: "me",
+      id: lead.gmailThreadId,
+      format: "metadata",
+      metadataHeaders: ["Date", "To", "Subject", "X-Notion-Page-Id"]
+    });
+
+    const sentMessage = (response.data.messages || [])
+      .map((message) => ({
+        id: message.id,
+        threadId: message.threadId,
+        labelIds: message.labelIds || [],
+        headers: Object.fromEntries(
+          (message.payload?.headers || []).map((header) => [header.name, header.value])
+        )
+      }))
+      .find((message) => message.labelIds.includes("SENT") && matchesSentLead(message, lead));
+
+    if (!sentMessage) return null;
+
+    return {
+      id: sentMessage.id,
+      threadId: sentMessage.threadId,
+      sentAt: parseGmailDate(sentMessage.headers.Date)
+    };
+  } catch (error) {
+    if (error?.code === 404) return null;
+    throw error;
+  }
 }
 
 export async function findReplyToLead(gmail, lead) {
