@@ -9,7 +9,7 @@ export const PROPERTIES = {
   contactEmail: ["Email", "E-Mail", "Kontakt E-Mail"],
   contactPhone: ["Phone", "Telefonnummer", "Kontakt Telefon"],
   contactPerson: ["Ansprechpartner"],
-  pipelineStatus: ["Status", "Pipeline Status", "CRM Status"],
+  pipelineStatus: ["Status", "Funnel", "Pipeline Status", "CRM Status"],
   automationStatus: ["Automation Status"],
   gmailDraftLink: ["Gmail Draft Link"],
   gmailDraftId: ["Gmail Draft ID"],
