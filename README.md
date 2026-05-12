@@ -11,6 +11,7 @@ Wichtig: Dieses Projekt sendet niemals automatisch E-Mails. Der finale Versand e
 - Ergänzt Firmenname, E-Mail, Telefon, Ansprechpartner, LinkedIn, Datenquelle, Datenqualität und letzte Aktualisierung in Notion.
 - Überschreibt manuell gepflegte Felder nicht automatisch.
 - Erstellt nur dann einen Gmail-Entwurf, wenn eine sichere geschäftliche E-Mail-Adresse gefunden wurde.
+- Berücksichtigt optional pro Lead `E-Mail Prompt` und `Gewünschter Preis`, um Entwürfe gezielter zu formulieren.
 - Unterscheidet regionale und überregionale Leads für den passenden Anhang.
 - Erkennt nach manuellem Versand eines Gmail-Entwurfs die gesendete Mail und verschiebt den Lead in der Pipeline auf `E-Mail / Contacted`.
 - Erstellt nach 7 Tagen ohne erkannte Antwort einen Follow-up-Entwurf.
@@ -48,6 +49,8 @@ Automation Error
 Follow-up Draft ID
 Follow-up erstellt am
 Antwort erkannt am
+E-Mail Prompt
+Gewünschter Preis
 Notizen
 ```
 
@@ -79,6 +82,33 @@ Fehler
 Vollständig
 Teilweise
 Unvollständig
+```
+
+Optionale Felder für bessere E-Mail-Entwürfe:
+
+```text
+E-Mail Prompt = Text
+Gewünschter Preis = Text
+```
+
+`E-Mail Prompt` ist ein kurzer Hinweis pro Lead. Er wird kontrolliert in den individuellen Absatz eingebaut, aber nicht blind als fertiger Mailtext kopiert.
+
+Gute Beispiele:
+
+```text
+Betone, dass Eintrittskarten als Preise besonders passend wären.
+Sprich den regionalen Bezug zur Bodenseeregion an.
+Betone das Museum als spannendes Bildungs- und Erlebnisangebot.
+```
+
+`Gewünschter Preis` steuert den konkreten Anfrage-Satz. Gute Beispiele:
+
+```text
+Eintrittskarten
+Gutscheinen
+Eintrittskarten oder Gutscheinen
+Produktpaketen
+Rabattcodes
 ```
 
 ## Setup
@@ -136,14 +166,15 @@ Regionale Leads erhalten `Infoblatt HTWG Scavengerhunt.pdf`. Überregionale oder
 
 1. Du legst in Notion einen Lead an.
 2. Du trägst mindestens `Website` ein.
-3. Du setzt `Automation Status` auf `Neu`.
-4. Die Automation ergänzt öffentlich verfügbare Kontaktdaten.
-5. Wenn eine sichere E-Mail gefunden wurde, erstellt sie einen Gmail-Entwurf.
-6. Der Lead bleibt im Pipeline-Status `Lead`.
-7. Du prüfst den Entwurf manuell in Gmail und klickst selbst auf `Senden`.
-8. Beim nächsten Lauf erkennt die Automation den Versand und setzt den Pipeline-Status auf `E-Mail / Contacted`.
-9. Nach 7 Tagen ohne erkannte Antwort wird ein Follow-up-Entwurf erstellt.
-10. Wenn eine Antwort erkannt wird, wird der Lead auf `Interested` gesetzt.
+3. Optional füllst du `E-Mail Prompt` oder `Gewünschter Preis`.
+4. Du setzt `Automation Status` auf `Neu`.
+5. Die Automation ergänzt öffentlich verfügbare Kontaktdaten.
+6. Wenn eine sichere E-Mail gefunden wurde, erstellt sie einen Gmail-Entwurf.
+7. Der Lead bleibt im Pipeline-Status `Lead`.
+8. Du prüfst den Entwurf manuell in Gmail und klickst selbst auf `Senden`.
+9. Beim nächsten Lauf erkennt die Automation den Versand und setzt den Pipeline-Status auf `E-Mail / Contacted`.
+10. Nach 7 Tagen ohne erkannte Antwort wird ein Follow-up-Entwurf erstellt.
+11. Wenn eine Antwort erkannt wird, wird der Lead auf `Interested` gesetzt.
 
 ## Test
 
