@@ -68,6 +68,11 @@ export async function getLeadsForAutomation(notion) {
   return pages.map(mapLead);
 }
 
+export async function getAllLeads(notion) {
+  const pages = await queryAllDatabasePages(notion);
+  return pages.map(mapLead);
+}
+
 export async function getDraftedLeads(notion) {
   const pages = await queryAllDatabasePages(notion, selectFilter("automationStatus", AUTOMATION_STATUS.DRAFT_CREATED));
   return pages.map(mapLead);
