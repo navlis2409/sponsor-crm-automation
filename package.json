@@ -6,7 +6,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "check": "node --check src/index.js && node --check src/notion.js && node --check src/gmail.js && node --check src/contactResearch.js && node --check src/emailTemplate.js && node --check src/personalization.js && node --check src/attachmentSelector.js"
+    "check": "node --check src/index.js && node --check src/notion.js && node --check src/gmail.js && node --check src/contactResearch.js && node --check src/emailTemplate.js && node --check src/personalization.js && node --check src/attachmentSelector.js && node --check src/dashboardExport.js"
   },
   "engines": {
     "node": ">=20"
