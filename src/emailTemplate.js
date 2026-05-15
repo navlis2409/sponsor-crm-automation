@@ -11,7 +11,7 @@ export function buildEmailBody(lead, research) {
       "",
       "mein Name ist Silvan Dorner und ich bin Student an der HTWG Konstanz. Gemeinsam mit unserem Team organisieren wir eine Schnitzeljagd für internationale Austauschstudierende.",
       "",
-      "Für diese Veranstaltung suchen wir passende Preise, mit denen die Teilnehmenden Konstanz, die Bodenseeregion und interessante Ausflugsziele auf spielerische Weise kennenlernen können.",
+      "Mit der Veranstaltung möchten wir internationalen Studierenden Konstanz, die Bodenseeregion und interessante Ausflugsziele näherbringen.",
       "",
       personalization.paragraph,
       "",
@@ -39,10 +39,10 @@ export function buildEmailBody(lead, research) {
 function buildSupportRequest(lead) {
   const desiredPrize = cleanDesiredPrize(lead.desiredPrize);
   if (!desiredPrize) {
-    return "Deshalb möchten wir freundlich anfragen, ob Sie sich vorstellen könnten, unsere Veranstaltung mit passenden Preisen, zum Beispiel Eintrittskarten oder Gutscheinen, zu unterstützen.";
+    return "Deshalb möchten wir freundlich anfragen, ob Sie sich vorstellen könnten, unsere Veranstaltung durch Eintrittskarten oder Gutscheine zu unterstützen.";
   }
 
-  return `Deshalb möchten wir freundlich anfragen, ob Sie sich vorstellen könnten, unsere Veranstaltung mit passenden Preisen in Form von ${desiredPrize} zu unterstützen.`;
+  return `Deshalb möchten wir freundlich anfragen, ob Sie sich vorstellen könnten, unsere Veranstaltung durch ${desiredPrize} zu unterstützen.`;
 }
 
 function cleanDesiredPrize(value) {
@@ -60,14 +60,14 @@ function cleanDesiredPrize(value) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/ß/g, "ss");
 
-  if (["preise", "passende preise", "kleine preise"].includes(normalized)) return "";
+  if (["preise", "passende preise", "kleine preise", "sachleistungen"].includes(normalized)) return "";
   if (normalized.includes("eintritt") && normalized.includes("gutschein")) {
-    return "Eintrittskarten oder Gutscheinen";
+    return "Eintrittskarten oder Gutscheine";
   }
   if (normalized.includes("eintritt") || normalized.includes("ticket")) return "Eintrittskarten";
-  if (normalized.includes("gutschein")) return "Gutscheinen";
-  if (normalized.includes("sachpreis")) return "Sachpreisen";
-  if (normalized.includes("produkt")) return "Produktpaketen";
+  if (normalized.includes("gutschein")) return "Gutscheine";
+  if (normalized.includes("sachpreis")) return "Sachpreise";
+  if (normalized.includes("produkt")) return "Produktpakete";
   if (normalized.includes("rabatt")) return "Rabattcodes";
 
   return text;
