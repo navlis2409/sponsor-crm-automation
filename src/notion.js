@@ -58,14 +58,8 @@ export function createNotionClient() {
 }
 
 export async function getLeadsForAutomation(notion) {
-  const pages = await queryAllDatabasePages(notion, {
-    or: [
-      selectFilter("automationStatus", AUTOMATION_STATUS.NEW),
-      selectFilter("automationStatus", AUTOMATION_STATUS.ENRICHED)
-    ]
-  });
-
-  return pages.map(mapLead);
+  const pages = await queryAllDatabasePages(notion);
+  return pages.map(mapLead).filter(shouldProcessLead);
 }
 
 export async function getAllLeads(notion) {
@@ -257,6 +251,18 @@ function selectFilter(key, value) {
     property,
     select: { equals: value }
   };
+}
+
+function shouldProcessLead(lead) {
+  if ([AUTOMATION_STATUS.NEW, AUTOMATION_STATUS.ENRICHED].includes(lead.automationStatus)) {
+    return true;
+  }
+
+  if (lead.automationStatus) return false;
+  if (lead.gmailDraftId || lead.gmailSentMessageId || lead.sentAt || lead.lastContacted) return false;
+  if (lead.pipelineStatus && lead.pipelineStatus !== PIPELINE_STATUS.LEAD) return false;
+
+  return Boolean(lead.website || lead.contactEmail);
 }
 
 function createLeadPatch(lead) {
