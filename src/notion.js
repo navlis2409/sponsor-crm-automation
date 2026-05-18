@@ -68,13 +68,22 @@ export async function getAllLeads(notion) {
 }
 
 export async function getDraftedLeads(notion) {
-  const pages = await queryAllDatabasePages(notion, selectFilter("automationStatus", AUTOMATION_STATUS.DRAFT_CREATED));
-  return pages.map(mapLead);
+  const pages = await queryAllDatabasePages(notion);
+  return pages.map(mapLead).filter((lead) =>
+    lead.automationStatus === AUTOMATION_STATUS.DRAFT_CREATED
+    || (hasRecoverableGmailAuthError(lead) && Boolean(lead.gmailDraftId))
+  );
 }
 
 export async function getContactedEmailLeads(notion) {
-  const pages = await queryAllDatabasePages(notion, selectFilter("automationStatus", AUTOMATION_STATUS.CONTACTED));
-  return pages.map(mapLead);
+  const pages = await queryAllDatabasePages(notion);
+  return pages.map(mapLead).filter((lead) =>
+    lead.automationStatus === AUTOMATION_STATUS.CONTACTED
+    || (
+      hasRecoverableGmailAuthError(lead)
+      && (lead.pipelineStatus === PIPELINE_STATUS.CONTACTED_EMAIL || lead.gmailSentMessageId || lead.sentAt || lead.lastContacted)
+    )
+  );
 }
 
 export async function findExistingLeadByWebsiteOrEmail(notion, lead) {
@@ -258,11 +267,25 @@ function shouldProcessLead(lead) {
     return true;
   }
 
+  if (hasRecoverableGmailAuthError(lead)) {
+    if (lead.gmailDraftId || lead.gmailSentMessageId || lead.sentAt || lead.lastContacted) return false;
+    return Boolean(lead.website || lead.contactEmail);
+  }
+
   if (lead.automationStatus) return false;
   if (lead.gmailDraftId || lead.gmailSentMessageId || lead.sentAt || lead.lastContacted) return false;
   if (lead.pipelineStatus && lead.pipelineStatus !== PIPELINE_STATUS.LEAD) return false;
 
   return Boolean(lead.website || lead.contactEmail);
+}
+
+function hasRecoverableGmailAuthError(lead) {
+  if (lead.automationStatus !== AUTOMATION_STATUS.ERROR) return false;
+
+  const text = `${lead.automationError || ""}\n${lead.notes || ""}`.toLowerCase();
+  return text.includes("invalid_grant")
+    || text.includes("refresh token")
+    || text.includes("gmail-authentifizierung");
 }
 
 function createLeadPatch(lead) {

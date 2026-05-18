@@ -18,6 +18,25 @@ export function createGmailClient() {
   return google.gmail({ version: "v1", auth: oauth2Client });
 }
 
+export async function checkGmailAccess(gmail) {
+  try {
+    await gmail.users.getProfile({ userId: "me" });
+    return true;
+  } catch (error) {
+    if (isGmailAuthError(error)) return false;
+    throw error;
+  }
+}
+
+export function isGmailAuthError(error) {
+  const message = String(error?.message || "");
+  const errors = error?.errors || [];
+
+  return error?.code === 401
+    || message.includes("invalid_grant")
+    || errors.some((item) => item?.reason === "authError" || item?.message?.includes("invalid_grant"));
+}
+
 export async function createDraft(gmail, { to, body, attachmentPath, leadId, subject = SUBJECT, replyMessageId = null }) {
   const sender = requiredEnv("GMAIL_SENDER_EMAIL");
   const raw = await buildRawMessage({
