@@ -43,6 +43,7 @@ export const AUTOMATION_STATUS = {
 export const PIPELINE_STATUS = {
   LEAD: "Lead",
   CONTACTED_EMAIL: "E-Mail / Contacted",
+  REPLY: "Reply",
   INTERESTED: "Interested",
   CLOSED_LOST: "Closed-Lost"
 };
@@ -204,9 +205,7 @@ export async function updateLeadAfterManualSend(notion, lead, sentMessage) {
   const notes = appendNote(lead.notes, "E-Mail wurde manuell versendet.");
   const patch = createLeadPatch(lead);
   patch.set("automationStatus", selectValue(AUTOMATION_STATUS.CONTACTED));
-  if (!lead.pipelineStatus || lead.pipelineStatus === PIPELINE_STATUS.LEAD) {
-    patch.set("pipelineStatus", selectLikeValue(lead.pipelineStatusType, PIPELINE_STATUS.CONTACTED_EMAIL));
-  }
+  patch.set("pipelineStatus", selectLikeValue(lead.pipelineStatusType, PIPELINE_STATUS.CONTACTED_EMAIL));
   patch.set("sentAt", dateValue(sentMessage.sentAt));
   patch.set("lastContacted", dateValue(sentMessage.sentAt));
   patch.set("gmailSentMessageId", richText(sentMessage.id));
@@ -228,9 +227,7 @@ export async function updateLeadAfterReply(notion, lead, reply) {
   const patch = createLeadPatch(lead);
   patch.set("replyDetectedAt", dateValue(reply.receivedAt));
   patch.set("notes", richText(appendNote(lead.notes, `Antwort vom Sponsor erkannt. Bitte prüfen.\nGmail Message ID: ${reply.id}`)));
-  if (!lead.pipelineStatus || lead.pipelineStatus === PIPELINE_STATUS.CONTACTED_EMAIL) {
-    patch.set("pipelineStatus", selectLikeValue(lead.pipelineStatusType, PIPELINE_STATUS.INTERESTED));
-  }
+  patch.set("pipelineStatus", selectLikeValue(lead.pipelineStatusType, PIPELINE_STATUS.REPLY));
   await patch.apply(notion);
 }
 

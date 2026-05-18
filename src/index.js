@@ -28,7 +28,6 @@ import {
 import { researchBusinessContact } from "./contactResearch.js";
 import { buildEmailBody } from "./emailTemplate.js";
 import { describeAttachment, selectAttachment } from "./attachmentSelector.js";
-import { exportDashboardData } from "./dashboardExport.js";
 
 const FOLLOW_UP_AFTER_DAYS = 7;
 
@@ -48,7 +47,6 @@ async function main() {
     await processDraftedLeads(notion, gmail);
     await processContactedLeads(notion, gmail);
   }
-  await exportDashboardData(notion);
 }
 
 async function processLeadPipeline(notion, gmail) {
@@ -198,7 +196,7 @@ async function processContactedLeads(notion, gmail) {
 }
 
 async function processContactedLead(notion, gmail, lead) {
-  if (lead.pipelineStatus === "Interested") return;
+  if (["Reply", "Interested"].includes(lead.pipelineStatus)) return;
 
   const reply = await findReplyToLead(gmail, lead);
   if (reply) {

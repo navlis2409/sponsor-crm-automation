@@ -119,29 +119,42 @@ export async function findManualSentMessage(gmail, lead, { allowSearchFallback =
 
   if (!allowSearchFallback) return null;
 
-  const query = [
-    "in:sent",
-    `to:${lead.contactEmail}`,
-    `subject:"${SUBJECT}"`,
-    "newer_than:180d"
-  ].join(" ");
+  const dateFilter = lead.lastUpdated
+    ? `after:${formatGmailAfterDate(lead.lastUpdated)}`
+    : "newer_than:180d";
 
-  const messages = await listMessages(gmail, query, 10);
+  const queries = [
+    [
+      "in:sent",
+      `to:${lead.contactEmail}`,
+      `subject:"${SUBJECT}"`,
+      dateFilter
+    ].join(" "),
+    [
+      "in:sent",
+      `to:${lead.contactEmail}`,
+      dateFilter
+    ].join(" ")
+  ];
 
-  for (const message of messages) {
-    const sent = await getMessageMetadata(gmail, message.id, [
-      "Date",
-      "To",
-      "Subject",
-      "X-Notion-Page-Id"
-    ]);
+  for (const query of queries) {
+    const messages = await listMessages(gmail, query, 10);
 
-    if (matchesSentLead(sent, lead)) {
-      return {
-        id: sent.id,
-        threadId: sent.threadId,
-        sentAt: parseGmailDate(sent.headers.Date)
-      };
+    for (const message of messages) {
+      const sent = await getMessageMetadata(gmail, message.id, [
+        "Date",
+        "To",
+        "Subject",
+        "X-Notion-Page-Id"
+      ]);
+
+      if (matchesSentLead(sent, lead)) {
+        return {
+          id: sent.id,
+          threadId: sent.threadId,
+          sentAt: parseGmailDate(sent.headers.Date)
+        };
+      }
     }
   }
 
@@ -186,6 +199,9 @@ async function findSentMessageInThread(gmail, lead) {
 export async function findReplyToLead(gmail, lead) {
   if (!lead.contactEmail || !lead.sentAt || lead.replyDetectedAt) return null;
 
+  const replyInThread = await findReplyInThread(gmail, lead);
+  if (replyInThread) return replyInThread;
+
   const domain = lead.contactEmail.split("@")[1];
   const after = formatGmailAfterDate(lead.sentAt);
   const queries = [
@@ -209,6 +225,52 @@ export async function findReplyToLead(gmail, lead) {
   }
 
   return null;
+}
+
+async function findReplyInThread(gmail, lead) {
+  if (!lead.gmailThreadId) return null;
+
+  try {
+    const response = await gmail.users.threads.get({
+      userId: "me",
+      id: lead.gmailThreadId,
+      format: "metadata",
+      metadataHeaders: ["Date", "From", "To", "Subject", "Auto-Submitted", "Precedence"]
+    });
+
+    const sender = requiredEnv("GMAIL_SENDER_EMAIL").toLowerCase();
+    const sentAt = new Date(lead.sentAt);
+
+    const reply = (response.data.messages || [])
+      .map((message) => ({
+        id: message.id,
+        threadId: message.threadId,
+        labelIds: message.labelIds || [],
+        headers: Object.fromEntries(
+          (message.payload?.headers || []).map((header) => [header.name, header.value])
+        )
+      }))
+      .find((message) => {
+        const from = message.headers.From || "";
+        const receivedAt = parseGmailDate(message.headers.Date);
+        if (!receivedAt) return false;
+        if (!Number.isNaN(sentAt.getTime()) && new Date(receivedAt) <= sentAt) return false;
+        if (message.labelIds.includes("SENT")) return false;
+        if (from.toLowerCase().includes(sender)) return false;
+        return !isAutomaticReply(message.headers);
+      });
+
+    if (!reply) return null;
+
+    return {
+      id: reply.id,
+      threadId: reply.threadId,
+      receivedAt: parseGmailDate(reply.headers.Date)
+    };
+  } catch (error) {
+    if (error?.code === 404) return null;
+    throw error;
+  }
 }
 
 function isAutomaticReply(headers) {
@@ -252,7 +314,21 @@ function matchesSentLead(message, lead) {
   if (notionPageId && notionPageId === lead.id) return true;
   if (lead.gmailThreadId && message.threadId === lead.gmailThreadId) return true;
 
-  return subject === SUBJECT && recipient.toLowerCase().includes(lead.contactEmail.toLowerCase());
+  if (!recipient.toLowerCase().includes(lead.contactEmail.toLowerCase())) return false;
+  if (subjectMatches(subject)) return true;
+
+  return Boolean(lead.gmailDraftId || lead.gmailDraftMessageId);
+}
+
+function subjectMatches(subject) {
+  const normalized = subject
+    .replace(/^(re|aw|fw|fwd):\s*/i, "")
+    .trim()
+    .toLowerCase();
+
+  return normalized === SUBJECT.toLowerCase()
+    || normalized.includes("sponsoring-anfrage")
+    || normalized.includes("htwg scavengerhunt");
 }
 
 async function buildRawMessage({ from, to, subject, body, attachmentPath, headers = {} }) {
