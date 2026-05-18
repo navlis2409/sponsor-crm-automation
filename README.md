@@ -15,10 +15,9 @@ Wichtig: Dieses Projekt sendet niemals automatisch E-Mails. Der finale Versand e
 - Unterscheidet regionale und überregionale Leads für den passenden Anhang.
 - Erkennt nach manuellem Versand eines Gmail-Entwurfs die gesendete Mail und verschiebt den Lead in der Pipeline auf `E-Mail / Contacted`.
 - Erstellt nach 7 Tagen ohne erkannte Antwort einen Follow-up-Entwurf.
-- Erkennt Antworten vorsichtig und verschiebt den Lead auf `Interested`.
+- Erkennt Antworten vorsichtig und verschiebt den Lead auf `Reply`.
 - Prüft mögliche Duplikate anhand von Website oder E-Mail.
-- Läuft über GitHub Actions alle 10 Minuten.
-- Exportiert Dashboard-Daten für PowerBI als CSV-Dateien im Ordner `dashboard/`.
+- Läuft über GitHub Actions alle 5 Minuten.
 
 ## Notion-Felder
 
@@ -62,6 +61,7 @@ Lead
 Called / Contacted
 E-Mail / Contacted
 Interested
+Reply
 Closed-Won
 Closed-Lost
 ```
@@ -175,36 +175,7 @@ Regionale Leads erhalten `Infoblatt HTWG Scavengerhunt.pdf`. Überregionale oder
 8. Du prüfst den Entwurf manuell in Gmail und klickst selbst auf `Senden`.
 9. Beim nächsten Lauf erkennt die Automation den Versand und setzt den Pipeline-Status auf `E-Mail / Contacted`.
 10. Nach 7 Tagen ohne erkannte Antwort wird ein Follow-up-Entwurf erstellt.
-11. Wenn eine Antwort erkannt wird, wird der Lead auf `Interested` gesetzt.
-12. Am Ende jedes Laufs werden CSV-Dateien für PowerBI im Ordner `dashboard/` aktualisiert.
-
-## PowerBI Dashboard
-
-Die Automation erzeugt diese Dateien:
-
-```text
-dashboard/crm-leads.csv
-dashboard/crm-summary.csv
-dashboard/crm-funnel.csv
-dashboard/crm-automation-status.csv
-dashboard/crm-category.csv
-```
-
-`crm-leads.csv` enthält eine Zeile pro Lead und ist die wichtigste Datenquelle für PowerBI. Die anderen Dateien enthalten vorberechnete Kennzahlen für schnelle Karten und Diagramme.
-
-Empfohlene PowerBI-Visuals:
-
-```text
-KPI-Karten: Alle Leads, Entwürfe erstellt, Kontaktierte Leads, Interessierte Leads, Prüfen oder Fehler
-Funnel/gestapeltes Balkendiagramm: crm-funnel.csv
-Balkendiagramm: Leads nach Kategorie aus crm-category.csv
-Tabelle: crm-leads.csv mit Firma, Website, Status, Datenqualität, Last Contacted, Automation Error
-Karte: Geschätzte Minuten gespart aus crm-summary.csv
-```
-
-Damit die CSV-Dateien automatisch in GitHub gespeichert werden, braucht der Workflow Schreibrechte. In GitHub unter **Settings > Actions > General > Workflow permissions** muss **Read and write permissions** aktiv sein.
-
-Die CSV-Dateien werden nur committed, wenn sich CRM-Daten wirklich geändert haben. Dadurch entstehen nicht alle 10 Minuten unnötige Commits.
+11. Wenn eine Antwort erkannt wird, wird der Lead auf `Reply` gesetzt.
 
 ## Test
 
