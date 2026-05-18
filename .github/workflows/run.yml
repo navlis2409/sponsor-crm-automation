@@ -2,11 +2,8 @@ name: Run sponsor CRM automation
 
 on:
   schedule:
-    - cron: "3,13,23,33,43,53 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 concurrency:
   group: sponsor-crm-automation
@@ -42,21 +39,3 @@ jobs:
           GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
           GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
           GMAIL_SENDER_EMAIL: ${{ secrets.GMAIL_SENDER_EMAIL }}
-
-      - name: Commit PowerBI dashboard export
-        run: |
-          if [ ! -d dashboard ]; then
-            echo "No dashboard export found"
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dashboard/*.csv
-
-          if git diff --cached --quiet; then
-            echo "No dashboard changes to commit"
-          else
-            git commit -m "Update PowerBI dashboard export"
-            git push
-          fi
