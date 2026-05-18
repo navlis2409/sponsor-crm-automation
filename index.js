@@ -16,16 +16,19 @@ import {
   updateLeadAfterReply
 } from "./notion.js";
 import {
+  checkGmailAccess,
   createDraft,
   createFollowUpDraft,
   createGmailClient,
   draftExists,
   findManualSentMessage,
-  findReplyToLead
+  findReplyToLead,
+  isGmailAuthError
 } from "./gmail.js";
 import { researchBusinessContact } from "./contactResearch.js";
 import { buildEmailBody } from "./emailTemplate.js";
 import { describeAttachment, selectAttachment } from "./attachmentSelector.js";
+import { exportDashboardData } from "./dashboardExport.js";
 
 const FOLLOW_UP_AFTER_DAYS = 7;
 
@@ -34,10 +37,18 @@ async function main() {
 
   const notion = createNotionClient();
   const gmail = createGmailClient();
+  const gmailAvailable = await checkGmailAccess(gmail);
 
-  await processLeadPipeline(notion, gmail);
-  await processDraftedLeads(notion, gmail);
-  await processContactedLeads(notion, gmail);
+  if (!gmailAvailable) {
+    console.error("Gmail-Zugriff fehlgeschlagen: Refresh Token ist ungueltig oder abgelaufen. Notion-Enrichment laeuft weiter, Gmail-Schritte werden uebersprungen.");
+  }
+
+  await processLeadPipeline(notion, gmailAvailable ? gmail : null);
+  if (gmailAvailable) {
+    await processDraftedLeads(notion, gmail);
+    await processContactedLeads(notion, gmail);
+  }
+  await exportDashboardData(notion);
 }
 
 async function processLeadPipeline(notion, gmail) {
@@ -49,6 +60,10 @@ async function processLeadPipeline(notion, gmail) {
       await processLead(notion, gmail, lead);
     } catch (error) {
       console.error(`Lead konnte nicht verarbeitet werden (${lead.id}): ${error.message}`);
+      if (isGmailAuthError(error)) {
+        console.error("Gmail-Authentifizierung ist ungueltig. Lead bleibt unveraendert, bitte GMAIL_REFRESH_TOKEN erneuern.");
+        continue;
+      }
       await safelyMarkLeadError(notion, lead, error);
     }
   }
@@ -79,6 +94,11 @@ async function processLead(notion, gmail, lead) {
   const contactEmail = enrichedLead.contactEmail || research?.email;
   if (!contactEmail) {
     await markNeedsReview(notion, lead, "Keine sichere geschäftliche E-Mail-Adresse gefunden. Kein Gmail-Entwurf erstellt.");
+    return;
+  }
+
+  if (!gmail) {
+    console.log(`Gmail nicht verfuegbar, Entwurf wird spaeter erstellt: ${lead.company || lead.website || lead.id}`);
     return;
   }
 
@@ -123,6 +143,10 @@ async function processDraftedLeads(notion, gmail) {
       await processDraftedLead(notion, gmail, lead);
     } catch (error) {
       console.error(`Entwurfsstatus konnte nicht geprüft werden (${lead.id}): ${error.message}`);
+      if (isGmailAuthError(error)) {
+        console.error("Gmail-Authentifizierung ist ungueltig. Entwurfspruefung wird uebersprungen.");
+        continue;
+      }
       await safelyMarkLeadError(notion, lead, error);
     }
   }
@@ -134,11 +158,23 @@ async function processDraftedLead(notion, gmail, lead) {
     return;
   }
 
+  const sentMessageInThread = await findManualSentMessage(gmail, lead, { allowSearchFallback: false });
+  if (sentMessageInThread) {
+    await updateLeadAfterManualSend(notion, lead, sentMessageInThread);
+    return;
+  }
+
   const stillDraft = await draftExists(gmail, lead.gmailDraftId);
-  if (stillDraft) return;
+  if (stillDraft) {
+    console.log(`Gmail-Entwurf existiert noch, Lead bleibt unveraendert: ${lead.company || lead.id}`);
+    return;
+  }
 
   const sentMessage = await findManualSentMessage(gmail, lead);
-  if (!sentMessage) return;
+  if (!sentMessage) {
+    console.log(`Keine passende gesendete Gmail-Nachricht gefunden: ${lead.company || lead.id}`);
+    return;
+  }
 
   await updateLeadAfterManualSend(notion, lead, sentMessage);
 }
@@ -152,6 +188,10 @@ async function processContactedLeads(notion, gmail) {
       await processContactedLead(notion, gmail, lead);
     } catch (error) {
       console.error(`Kontaktierter Lead konnte nicht geprüft werden (${lead.id}): ${error.message}`);
+      if (isGmailAuthError(error)) {
+        console.error("Gmail-Authentifizierung ist ungueltig. Antwortpruefung wird uebersprungen.");
+        continue;
+      }
       await safelyMarkLeadError(notion, lead, error);
     }
   }

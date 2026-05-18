@@ -9,7 +9,7 @@ export const PROPERTIES = {
   contactEmail: ["Email", "E-Mail", "Kontakt E-Mail"],
   contactPhone: ["Phone", "Telefonnummer", "Kontakt Telefon"],
   contactPerson: ["Ansprechpartner"],
-  pipelineStatus: ["Status", "Pipeline Status", "CRM Status"],
+  pipelineStatus: ["Status", "Funnel", "Pipeline Status", "CRM Status"],
   automationStatus: ["Automation Status"],
   gmailDraftLink: ["Gmail Draft Link"],
   gmailDraftId: ["Gmail Draft ID"],
@@ -26,6 +26,8 @@ export const PROPERTIES = {
   followUpDraftId: ["Follow-up Draft ID", "Follow Up Draft ID"],
   followUpCreatedAt: ["Follow-up erstellt am", "Follow Up Created At"],
   replyDetectedAt: ["Antwort erkannt am"],
+  emailPrompt: ["E-Mail Prompt", "E-Mail Hinweis", "Email Prompt", "Email Hinweis"],
+  desiredPrize: ["Gewünschter Preis", "Gewuenschter Preis", "Gewünschte Unterstützung", "Gewuenschte Unterstuetzung"],
   notes: ["Notizen", "Notes"]
 };
 
@@ -56,24 +58,32 @@ export function createNotionClient() {
 }
 
 export async function getLeadsForAutomation(notion) {
-  const pages = await queryAllDatabasePages(notion, {
-    or: [
-      selectFilter("automationStatus", AUTOMATION_STATUS.NEW),
-      selectFilter("automationStatus", AUTOMATION_STATUS.ENRICHED)
-    ]
-  });
+  const pages = await queryAllDatabasePages(notion);
+  return pages.map(mapLead).filter(shouldProcessLead);
+}
 
+export async function getAllLeads(notion) {
+  const pages = await queryAllDatabasePages(notion);
   return pages.map(mapLead);
 }
 
 export async function getDraftedLeads(notion) {
-  const pages = await queryAllDatabasePages(notion, selectFilter("automationStatus", AUTOMATION_STATUS.DRAFT_CREATED));
-  return pages.map(mapLead);
+  const pages = await queryAllDatabasePages(notion);
+  return pages.map(mapLead).filter((lead) =>
+    lead.automationStatus === AUTOMATION_STATUS.DRAFT_CREATED
+    || (hasRecoverableGmailAuthError(lead) && Boolean(lead.gmailDraftId))
+  );
 }
 
 export async function getContactedEmailLeads(notion) {
-  const pages = await queryAllDatabasePages(notion, selectFilter("automationStatus", AUTOMATION_STATUS.CONTACTED));
-  return pages.map(mapLead);
+  const pages = await queryAllDatabasePages(notion);
+  return pages.map(mapLead).filter((lead) =>
+    lead.automationStatus === AUTOMATION_STATUS.CONTACTED
+    || (
+      hasRecoverableGmailAuthError(lead)
+      && (lead.pipelineStatus === PIPELINE_STATUS.CONTACTED_EMAIL || lead.gmailSentMessageId || lead.sentAt || lead.lastContacted)
+    )
+  );
 }
 
 export async function findExistingLeadByWebsiteOrEmail(notion, lead) {
@@ -252,6 +262,32 @@ function selectFilter(key, value) {
   };
 }
 
+function shouldProcessLead(lead) {
+  if ([AUTOMATION_STATUS.NEW, AUTOMATION_STATUS.ENRICHED].includes(lead.automationStatus)) {
+    return true;
+  }
+
+  if (hasRecoverableGmailAuthError(lead)) {
+    if (lead.gmailDraftId || lead.gmailSentMessageId || lead.sentAt || lead.lastContacted) return false;
+    return Boolean(lead.website || lead.contactEmail);
+  }
+
+  if (lead.automationStatus) return false;
+  if (lead.gmailDraftId || lead.gmailSentMessageId || lead.sentAt || lead.lastContacted) return false;
+  if (lead.pipelineStatus && lead.pipelineStatus !== PIPELINE_STATUS.LEAD) return false;
+
+  return Boolean(lead.website || lead.contactEmail);
+}
+
+function hasRecoverableGmailAuthError(lead) {
+  if (lead.automationStatus !== AUTOMATION_STATUS.ERROR) return false;
+
+  const text = `${lead.automationError || ""}\n${lead.notes || ""}`.toLowerCase();
+  return text.includes("invalid_grant")
+    || text.includes("refresh token")
+    || text.includes("gmail-authentifizierung");
+}
+
 function createLeadPatch(lead) {
   const properties = {};
 
@@ -325,6 +361,8 @@ function mapLead(page) {
     followUpDraftId: readPlainText(properties[propertyNames.followUpDraftId]),
     followUpCreatedAt: readDate(properties[propertyNames.followUpCreatedAt]),
     replyDetectedAt: readDate(properties[propertyNames.replyDetectedAt]),
+    emailPrompt: readPlainText(properties[propertyNames.emailPrompt]),
+    desiredPrize: readPlainText(properties[propertyNames.desiredPrize]),
     notes: readPlainText(properties[propertyNames.notes])
   };
 }
