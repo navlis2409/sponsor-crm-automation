@@ -1,5 +1,7 @@
 field,value,count
-automationStatus,Fehler,69
+automationStatus,Fehler,33
+automationStatus,Contacted Email,20
+automationStatus,Entwurf erstellt,16
 automationStatus,Ohne Automation Status,13
 automationStatus,Prüfen,7
 automationStatus,Daten ergänzt,2
